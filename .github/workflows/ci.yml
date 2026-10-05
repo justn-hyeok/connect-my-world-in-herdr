@@ -1,0 +1,29 @@
+name: Verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Toolchain
+        run: swift --version
+      - name: Tests
+        run: swift test
+      - name: Build application
+        run: zsh scripts/build-app.sh
+      - name: Verify bundle
+        run: |
+          codesign --verify --strict 'dist/Connect My World in Herdr.app'
+          plutil -lint 'dist/Connect My World in Herdr.app/Contents/Info.plist'
