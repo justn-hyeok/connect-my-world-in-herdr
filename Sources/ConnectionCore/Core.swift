@@ -68,7 +68,10 @@ public enum Command {
             for _ in 0..<10 where process.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
             if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
-        process.waitUntilExit()
+        // isRunning has already become false on normal completion. A second
+        // synchronous wait here can strand a cooperative worker in NSTask's
+        // run loop after an async suspension, even with no child left alive.
+        // Timeout/cancel paths return their own status without an unbounded wait.
         let reader = try? FileHandle(forReadingFrom: path)
         defer { try? reader?.close() }
         let data = (try? reader?.read(upToCount: 128_000)) ?? Data()

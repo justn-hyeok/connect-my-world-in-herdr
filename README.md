@@ -11,7 +11,7 @@ Herdr의 등록 서버를 확인하고 클릭으로 재연결하는 macOS 메뉴
 
 [GitHub Releases](https://github.com/justn-hyeok/connect-my-world-in-herdr/releases)에서 ZIP을 받고 압축을 푼 뒤 앱을 Applications 폴더로 옮겨 실행하세요.
 
-v0.2.0 배포 파일은 **Apple Silicon(M1 이상), macOS 15 이상**용입니다. Apple Developer ID 서명과 공증 없이 배포하며, 개발자 계정 없이 만든 로컬 ad-hoc 서명만 포함합니다.
+v0.2.1 배포 파일은 **Apple Silicon(M1 이상), macOS 15 이상**용입니다. Apple Developer ID 서명과 공증 없이 배포하며, 개발자 계정 없이 만든 로컬 ad-hoc 서명만 포함합니다.
 
 첫 실행이 차단되면 앱을 실행한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 확인 없이 열기(Open Anyway)**로 해당 앱을 승인할 수 있습니다. [Apple 실행 안내](https://support.apple.com/en-us/102445)를 참고하세요. 시스템 전체의 Gatekeeper를 끌 필요는 없습니다.
 
@@ -44,4 +44,4 @@ zsh scripts/build-app.sh
 
 ## 검증 범위
 
-Swift Testing 9개가 상태, 부분 실패, 등록 변경, 명령 인자/시간 제한, VM 계층을 검증합니다. GUI 버튼 전체 흐름은 검증하지 않았습니다.
+Swift Testing 10개가 상태, 부분 실패, 등록 변경, 명령 인자/시간 제한, VM 계층을 검증합니다. GUI 버튼 전체 흐름은 검증하지 않았습니다.
