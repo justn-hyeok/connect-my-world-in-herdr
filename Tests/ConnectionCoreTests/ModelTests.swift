@@ -110,15 +110,31 @@ private actor Script {
     let ip = try machine("ubuntu@100.75.152.85")
     let script = Script([try registry([rapi, pn, madp, ip]),
         .init(code: 0, output: "user ubuntu\nhostname rapi-agent.tail0000.ts.net\nport 22"),
-        .init(code: 0, output: "hostname 192.168.0.26\nproxyjump pve"),
+        .init(code: 0, output: "hostname 192.168.0.26\nproxyjump ubuntu@pve:22"),
+        .init(code: 0, output: "hostname fd7a:115c:a1e0::9829:9413"),
         .init(code: 0, output: "hostname dev.example.cloud"),
         .init(code: 0, output: "hostname 100.75.152.85")])
     let model = ConnectionModel(autoRefresh: false, preferences: defaults(),
         runner: { exe, args in await script.run(exe, args) })
     await model.selectTailscale()
-    #expect(model.selected == [rapi.id, ip.id])
-    #expect(model.message.contains("2개"))
+    // pve-new is a LAN address reached through a Tailscale jump host, so it counts.
+    #expect(model.selected == [rapi.id, pn.id, ip.id])
+    #expect(model.message.contains("3개"))
+    #expect(await script.arguments.contains(["/usr/bin/ssh", "-G", "pve"]))
     let commands = await script.arguments
     #expect(commands.dropFirst().allSatisfy { $0.first == "/usr/bin/ssh" && $0[1] == "-G" })
     #expect(!commands.contains(where: { $0.contains("enable") || $0.contains("disable") }))
+}
+
+@Test @MainActor func jumpLoopsAndLANJumpsAreNotTailscale() async throws {
+    let looped = try machine("a")
+    let script = Script([try registry([looped]),
+        .init(code: 0, output: "hostname 10.0.0.1\nproxyjump b"),
+        .init(code: 0, output: "hostname 10.0.0.2\nproxyjump a"),
+        .init(code: 0, output: "hostname 10.0.0.1\nproxyjump b")])
+    let model = ConnectionModel(autoRefresh: false, preferences: defaults(),
+        runner: { exe, args in await script.run(exe, args) })
+    await model.selectTailscale()
+    #expect(model.selected.isEmpty)
+    #expect(await script.arguments.count == 3)
 }

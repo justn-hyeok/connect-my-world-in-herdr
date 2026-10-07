@@ -91,4 +91,12 @@ private actor FakeRunner {
     }
     #expect(Policy.sshHostname(.init(code: 0, output: "user a\nhostname 100.75.152.85\nport 22")) == "100.75.152.85")
     #expect(Policy.sshHostname(.init(code: 255, output: "hostname x")) == nil)
+    func jump(_ value: String) -> String? { Policy.sshFirstJump(.init(code: 0, output: "hostname x\nproxyjump \(value)")) }
+    #expect(jump("pve") == "pve")
+    #expect(jump("root@pve:2222,other") == "pve")
+    #expect(jump("ssh://root@pve:22") == "pve")
+    #expect(jump("[fd7a:115c:a1e0::1]:22") == "fd7a:115c:a1e0::1")
+    #expect(jump("none") == nil)
+    #expect(jump("-oProxyCommand=x") == nil)
+    #expect(Policy.sshFirstJump(.init(code: 0, output: "hostname x")) == nil)
 }

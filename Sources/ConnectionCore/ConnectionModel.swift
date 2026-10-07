@@ -128,11 +128,23 @@ import Observation
         guard await loadRegistry() else { return }
         var tailnet: Set<String> = []
         for machine in machines where Reconnection.sshArguments(machine) != nil {
-            let config = await runner("/usr/bin/ssh", ["-G", machine.target])
-            if let host = Policy.sshHostname(config), Policy.isTailscale(host: host) { tailnet.insert(machine.id) }
+            if await reachesTailnet(machine.target) { tailnet.insert(machine.id) }
         }
         selected = tailnet
         message = tailnet.isEmpty ? "Tailscale 연결을 찾지 못했습니다." : "Tailscale 연결 \(tailnet.count)개 선택"
+    }
+
+    /// True when the host itself, or a ProxyJump hop on the way to it, is on the tailnet.
+    private func reachesTailnet(_ target: String) async -> Bool {
+        var next: String? = target
+        var seen: Set<String> = []
+        // Bounded walk: jump chains are short, and a config loop must not spin.
+        while let hop = next, seen.count < 4, seen.insert(hop).inserted {
+            let config = await runner("/usr/bin/ssh", ["-G", hop])
+            if let host = Policy.sshHostname(config), Policy.isTailscale(host: host) { return true }
+            next = Policy.sshFirstJump(config)
+        }
+        return false
     }
 
     public func reconnectSelected() async {

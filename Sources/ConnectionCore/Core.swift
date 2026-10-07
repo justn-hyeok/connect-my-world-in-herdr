@@ -43,10 +43,24 @@ public enum Policy {
     }
 
     /// The effective host from `ssh -G` output, so aliases in ~/.ssh/config resolve.
-    public static func sshHostname(_ result: CommandResult) -> String? {
+    public static func sshHostname(_ result: CommandResult) -> String? { sshOption("hostname", result) }
+
+    /// The first hop of `ProxyJump` as a target for another `ssh -G`, without user or port.
+    public static func sshFirstJump(_ result: CommandResult) -> String? {
+        guard let value = sshOption("proxyjump", result), value != "none",
+              let first = value.split(separator: ",").first else { return nil }
+        var hop = String(first)
+        if hop.hasPrefix("ssh://") { hop.removeFirst("ssh://".count) }
+        if let at = hop.lastIndex(of: "@") { hop = String(hop[hop.index(after: at)...]) }
+        if hop.hasPrefix("[") { hop = String(hop.dropFirst().prefix { $0 != "]" }) }
+        else if hop.filter({ $0 == ":" }).count == 1 { hop = String(hop.prefix { $0 != ":" }) }
+        return hop.isEmpty || hop.hasPrefix("-") ? nil : hop
+    }
+
+    private static func sshOption(_ key: String, _ result: CommandResult) -> String? {
         guard result.code == 0 else { return nil }
-        for line in result.output.split(separator: "\n") where line.hasPrefix("hostname ") {
-            return String(line.dropFirst("hostname ".count))
+        for line in result.output.split(separator: "\n") where line.hasPrefix(key + " ") {
+            return String(line.dropFirst(key.count + 1))
         }
         return nil
     }
