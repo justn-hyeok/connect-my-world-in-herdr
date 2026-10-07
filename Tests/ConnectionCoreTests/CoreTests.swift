@@ -62,3 +62,20 @@ private actor FakeRunner {
         #expect(Reconnection.sshArguments(machine) == nil)
     }
 }
+
+@Test func shortCommandsCompleteAfterAsyncSuspensions() async {
+    let start = ContinuousClock.now
+    let success = await withTaskGroup(of: Bool.self, returning: Bool.self) { group in
+        for _ in 0..<20 {
+            group.addTask {
+                let result = await Command.run("/bin/sleep", ["0.02"], timeout: 1)
+                return result.code == 0
+            }
+        }
+        var allSucceeded = true
+        for await succeeded in group { allSucceeded = allSucceeded && succeeded }
+        return allSucceeded
+    }
+    #expect(success)
+    #expect(start.duration(to: .now) < .seconds(5))
+}

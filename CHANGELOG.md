@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1 — 2026-10-07
+
+- Remove an unbounded process-exit wait that could leave server status checking busy after the child command had already exited. This fix existed in an unreleased local 0.1.5 build and was missing from 0.2.0.
+
 ## 0.2.0 — 2026-10-07
 
 - Removed the Teleport/tsh MADP path: the authentication state, login link, browser/terminal login waiting and the `tsh` requirement. Every server, MADP included, is now checked and reconnected as a plain OpenSSH target.
