@@ -41,25 +41,22 @@ struct Panel: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Image(systemName: state == .authentication ? "arrow.up.right.square" : "arrow.clockwise")
+                        Image(systemName: "arrow.clockwise")
                             .foregroundStyle(.secondary)
                     }.contentShape(Rectangle()).padding(.vertical, 4)
                 }
                 .buttonStyle(.plain)
-                .disabled(model.busy || model.waitingForAuthentication)
+                .disabled(model.busy)
                 .help(model.details[machine.id] ?? "클릭하여 재연결")
                 .accessibilityLabel("\(machine.label), \(row.isVM ? "소속 VM, " : "")\(state.rawValue), 재연결")
             }
             Divider()
             Text(model.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if model.waitingForAuthentication {
-                Button("인증 대기 취소") { model.cancelAuthentication() }
-            }
             HStack {
                 Button("상태 확인") { Task { await model.refresh() } }
                 Button("전체 재연결") { Task { await model.reconnectAll() } }
                     .disabled(model.machines.isEmpty)
-            }.disabled(model.busy || model.waitingForAuthentication)
+            }.disabled(model.busy)
             HStack {
                 Button("설정") { openWindow(id: "settings") }
                 Spacer()
@@ -72,7 +69,6 @@ struct Panel: View {
     func symbol(_ state: ConnectionState) -> String {
         switch state {
         case .ready: "checkmark.circle.fill"
-        case .authentication: "key.fill"
         case .checking, .reconnecting: "clock"
         case .disabled: "pause.circle"
         default: "exclamationmark.circle.fill"
@@ -81,7 +77,7 @@ struct Panel: View {
     func color(_ state: ConnectionState) -> Color {
         switch state {
         case .ready: .green
-        case .authentication, .disabled: .orange
+        case .disabled: .orange
         case .checking, .reconnecting: .secondary
         default: .red
         }
@@ -94,14 +90,6 @@ struct SettingsPanel: View {
     @State private var error = ""
     var body: some View {
         Form {
-            Section("MADP") {
-                TextField("로그인 링크 (설정 대기)", text: $model.loginURL)
-                Text("tsh 인증까지 완료되는 HTTPS 링크를 설정합니다. 현재 링크는 비워두었습니다.")
-                    .font(.caption).foregroundStyle(.secondary)
-                if !model.loginURL.isEmpty && Policy.loginURL(model.loginURL) == nil {
-                    Text("teleport.madp.cloud의 HTTPS 링크를 입력해주세요.").foregroundStyle(.red)
-                }
-            }
             Section("앱") {
                 Toggle("Mac 로그인 시 실행", isOn: $startAtLogin)
                     .onChange(of: startAtLogin) { _, value in
@@ -118,12 +106,12 @@ struct SettingsPanel: View {
                     .font(.caption).foregroundStyle(.secondary)
                 if !error.isEmpty { Text(error).foregroundStyle(.red) }
             }
-        }.formStyle(.grouped).padding().frame(width: 500, height: 290)
+        }.formStyle(.grouped).padding().frame(width: 500, height: 180)
     }
 }
 
 @main struct ConnectMyWorldApp: App {
-    @State private var model = Model(openURL: { NSWorkspace.shared.open($0) })
+    @State private var model = Model()
     var body: some Scene {
         MenuBarExtra("Connect My World in Herdr", systemImage: "network") {
             Panel(model: model)

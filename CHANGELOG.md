@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0 — 2026-10-07
+
+- Removed the Teleport/tsh MADP path: the authentication state, login link, browser/terminal login waiting and the `tsh` requirement. Every server, MADP included, is now checked and reconnected as a plain OpenSSH target.
+
 ## 0.1.3 — 2026-10-06
 
 First public release.

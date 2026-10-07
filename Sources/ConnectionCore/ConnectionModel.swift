@@ -8,35 +8,19 @@ import Observation
     public var busy = false
     public var message = "등록된 Herdr 연결을 불러옵니다."
     public var updated: Date?
-    public var waitingForAuthentication = false
-    public var loginURL: String {
-        didSet { preferences.set(loginURL, forKey: "madpLoginURL") }
-    }
-    private let preferences: UserDefaults
     private let runner: Reconnection.Runner
-    private let openURL: @MainActor (URL) -> Bool
-    private let authenticationPoll: Duration
-    private var authenticationID: UUID?
-    private var loginTask: Task<Void, Never>?
     private let herdr = "/opt/homebrew/bin/herdr"
-    private let tsh = "/opt/homebrew/bin/tsh"
 
-    public init(autoRefresh: Bool = true, preferences: UserDefaults = .standard,
-                authenticationPoll: Duration = .seconds(2),
-                openURL: @escaping @MainActor (URL) -> Bool = { _ in false },
+    public init(autoRefresh: Bool = true,
                 runner: @escaping Reconnection.Runner = { executable, arguments in
                     await Command.run(executable, arguments, timeout: 12)
                 }) {
-        self.preferences = preferences
         self.runner = runner
-        self.openURL = openURL
-        self.authenticationPoll = authenticationPoll
-        loginURL = preferences.string(forKey: "madpLoginURL") ?? ""
         if autoRefresh {
             Task { [weak self] in
                 while !Task.isCancelled {
                     if let self {
-                        if !self.waitingForAuthentication { await self.refresh() }
+                        await self.refresh()
                     } else { return }
                     try? await Task.sleep(for: .seconds(60))
                 }
@@ -45,7 +29,7 @@ import Observation
     }
 
     public func refresh() async {
-        guard !busy, !waitingForAuthentication else { return }
+        guard !busy else { return }
         busy = true
         defer { busy = false; updated = Date() }
         guard await loadRegistry() else { return }
@@ -71,28 +55,20 @@ import Observation
     }
 
     private func check(_ machine: Machine) async {
-        if machine.target == "madp" {
-            let auth = await runner(tsh, ["status", "--format=json"])
-            if !Policy.tshValid(auth) {
-                states[machine.id] = .authentication
-                details[machine.id] = "MADP 인증을 완료하면 자동으로 재연결합니다."
-                return
-            }
-        }
         guard let arguments = Reconnection.sshArguments(machine) else {
             states[machine.id] = .unreachable
             details[machine.id] = "등록된 SSH 대상 또는 세션 이름을 확인해주세요."
             return
         }
         let ssh = await runner("/usr/bin/ssh", arguments)
-        states[machine.id] = Policy.state(ssh: ssh, enabled: machine.enabled, authExpired: false)
+        states[machine.id] = Policy.state(ssh: ssh, enabled: machine.enabled)
         details[machine.id] = states[machine.id] == .ready || states[machine.id] == .disabled
             ? "SSH와 Herdr 서버 호환성 확인"
             : "원격 서버 응답을 확인하지 못했습니다."
     }
 
     public func reconnect(_ machine: Machine) async {
-        guard !busy, !waitingForAuthentication else { return }
+        guard !busy else { return }
         busy = true
         defer { busy = false; updated = Date() }
         guard await loadRegistry() else { return }
@@ -101,10 +77,6 @@ import Observation
             return
         }
         _ = await reconnectOne(current)
-        if states[current.id] == .authentication {
-            busy = false
-            startAuthentication()
-        }
     }
 
     @discardableResult private func reconnectOne(_ machine: Machine) async -> Bool {
@@ -130,7 +102,7 @@ import Observation
     }
 
     public func reconnectAll() async {
-        guard !busy, !waitingForAuthentication else { return }
+        guard !busy else { return }
         busy = true
         defer { busy = false; updated = Date() }
         guard await loadRegistry() else { return }
@@ -142,49 +114,5 @@ import Observation
         }
         message = "\(successes)개 연결 갱신 완료"
         if !failed.isEmpty { message += " · 확인 필요: " + failed.joined(separator: ", ") }
-    }
-
-    public func startAuthentication() {
-        guard !busy, !waitingForAuthentication else { return }
-        guard let url = Policy.loginURL(loginURL) else {
-            message = "MADP 로그인 링크 설정이 비어 있거나 올바르지 않습니다. 설정을 확인해주세요."
-            return
-        }
-        guard openURL(url) else { message = "로그인 링크를 열지 못했습니다."; return }
-        let id = UUID()
-        authenticationID = id
-        waitingForAuthentication = true
-        message = "브라우저에서 인증해주세요. tsh 인증 완료를 확인한 뒤 재연결합니다."
-        loginTask = Task {
-            let deadline = Date().addingTimeInterval(300)
-            while !Task.isCancelled && Date() < deadline {
-                let status = await runner(tsh, ["status", "--format=json"])
-                guard authenticationID == id, !Task.isCancelled else { return }
-                if Policy.tshValid(status) {
-                    waitingForAuthentication = false
-                    authenticationID = nil
-                    busy = true
-                    defer { busy = false; updated = Date() }
-                    if await loadRegistry(), let machine = machines.first(where: { $0.target == "madp" }) {
-                        await reconnectOne(machine)
-                    }
-                    return
-                }
-                try? await Task.sleep(for: authenticationPoll)
-            }
-            guard authenticationID == id else { return }
-            authenticationID = nil
-            waitingForAuthentication = false
-            if !Task.isCancelled { message = "인증 대기 종료 · 로그인 링크를 다시 열어주세요." }
-        }
-    }
-
-    public func cancelAuthentication() {
-        guard waitingForAuthentication else { return }
-        authenticationID = nil
-        loginTask?.cancel()
-        loginTask = nil
-        waitingForAuthentication = false
-        message = "인증 대기를 취소했습니다."
     }
 }

@@ -11,7 +11,6 @@ public struct Machine: Codable, Sendable, Identifiable {
 public enum ConnectionState: String, Sendable {
     case checking = "확인 중"
     case ready = "연결 가능"
-    case authentication = "인증 필요"
     case unreachable = "접속 불가"
     case serverStopped = "Herdr 서버 응답 없음"
     case disabled = "Herdr 연결 꺼짐"
@@ -25,44 +24,12 @@ public struct CommandResult: Sendable {
 }
 
 public enum Policy {
-    public static func state(ssh: CommandResult, enabled: Bool, authExpired: Bool) -> ConnectionState {
-        if authExpired { return .authentication }
+    public static func state(ssh: CommandResult, enabled: Bool) -> ConnectionState {
         if ssh.code != 0 { return .unreachable }
         if !ssh.output.contains("status: running") || !ssh.output.contains("endpoint_compatible: yes") {
             return .serverStopped
         }
         return enabled ? .ready : .disabled
-    }
-
-    public static func loginURL(_ value: String) -> URL? {
-        guard let url = URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines)),
-              url.scheme == "https", url.host == "teleport.madp.cloud",
-              url.user == nil, url.password == nil else { return nil }
-        return url
-    }
-
-    public static func tshValid(_ result: CommandResult, now: Date = Date()) -> Bool {
-        struct Status: Decodable {
-            struct Profile: Decodable {
-                let profile_url: String
-                let cluster: String
-                let valid_until: String
-            }
-            let active: Profile?
-        }
-        guard result.code == 0, let data = result.output.data(using: .utf8),
-              let status = try? JSONDecoder().decode(Status.self, from: data),
-              let active = status.active,
-              active.cluster == "madp.cloud",
-              let url = URL(string: active.profile_url),
-              url.scheme == "https", url.host == "teleport.madp.cloud" else { return false }
-        let formatter = ISO8601DateFormatter()
-        var expiry = formatter.date(from: active.valid_until)
-        if expiry == nil {
-            formatter.formatOptions.insert(.withFractionalSeconds)
-            expiry = formatter.date(from: active.valid_until)
-        }
-        return expiry.map { $0 > now } ?? false
     }
 }
 
@@ -125,7 +92,7 @@ public enum Reconnection {
     public static func run(_ machine: Machine, herdr: String, runner: Runner) async -> CommandResult {
         guard let ssh = sshArguments(machine) else { return .init(code: -1, output: "SSH 대상 또는 세션 이름이 올바르지 않습니다.") }
         let before = await runner("/usr/bin/ssh", ssh)
-        guard Policy.state(ssh: before, enabled: true, authExpired: false) == .ready else {
+        guard Policy.state(ssh: before, enabled: true) == .ready else {
             return .init(code: -1, output: "원격 서버가 응답하지 않아 연결 갱신을 실행하지 않았습니다.")
         }
         if machine.enabled {
@@ -139,7 +106,7 @@ public enum Reconnection {
         }
         guard enabled.code == 0 else { return .init(code: -1, output: "Herdr 연결 켜기 실패 · 다시 재연결해주세요.") }
         let after = await runner("/usr/bin/ssh", ssh)
-        guard Policy.state(ssh: after, enabled: true, authExpired: false) == .ready else {
+        guard Policy.state(ssh: after, enabled: true) == .ready else {
             return .init(code: -1, output: "Herdr 연결을 켰지만 원격 서버 응답이 확인되지 않았습니다.")
         }
         return .init(code: 0, output: "연결 갱신 완료 · 원격 서버 응답 확인")
