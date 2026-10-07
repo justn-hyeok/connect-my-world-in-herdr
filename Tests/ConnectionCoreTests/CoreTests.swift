@@ -81,15 +81,16 @@ private actor FakeRunner {
 }
 
 @Test func tailscaleHostsAreRecognizedByAddressOrMagicDNS() {
-    for host in ["rapi-agent.tail993e8d.ts.net", "100.64.0.1", "100.127.255.254", "100.75.152.85",
-                 "fd7a:115c:a1e0::9829:9413", "[fd7a:115c:a1e0::1]", "HOST.TS.NET"] {
+    for host in ["rapi-agent.tail0000.ts.net", "100.64.0.1", "100.127.255.254", "100.100.10.20",
+                 "fd7a:115c:a1e0::1:2", "[fd7a:115c:a1e0::1]", "FD7A:115C:A1E0:0:0:0:0:1", "HOST.TS.NET"] {
         #expect(Policy.isTailscale(host: host), "\(host)")
     }
     for host in ["192.168.0.26", "100.63.0.1", "100.128.0.1", "10.0.0.1", "dev.example.cloud",
-                 "ts.net.example.com", "100.75.152", "100.75.152.85.5", "fd7a:115c:a1e1::1", ""] {
+                 "ts.net.example.com", "100.100.10", "100.100.10.20.5", "100..64.1.1", "100.064.1.1x",
+                 "fd7a:115c:a1e1::1", ""] {
         #expect(!Policy.isTailscale(host: host), "\(host)")
     }
-    #expect(Policy.sshHostname(.init(code: 0, output: "user a\nhostname 100.75.152.85\nport 22")) == "100.75.152.85")
+    #expect(Policy.sshHostname(.init(code: 0, output: "user a\nhostname 100.100.10.20\nport 22")) == "100.100.10.20")
     #expect(Policy.sshHostname(.init(code: 255, output: "hostname x")) == nil)
     func jump(_ value: String) -> String? { Policy.sshFirstJump(.init(code: 0, output: "hostname x\nproxyjump \(value)")) }
     #expect(jump("pve") == "pve")

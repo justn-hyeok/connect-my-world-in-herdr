@@ -26,9 +26,8 @@ struct Panel: View {
                 HStack(spacing: 8) {
                 Toggle("\(machine.label) 선택", isOn: Binding(
                     get: { model.selected.contains(machine.id) },
-                    set: { _ in model.toggle(machine) }))
+                    set: { model.setSelected(machine, $0) }))
                     .toggleStyle(.checkbox).labelsHidden()
-                    .disabled(model.busy)
                 Button {
                     Task { await model.reconnect(machine) }
                 } label: {
@@ -62,11 +61,14 @@ struct Panel: View {
             HStack {
                 Button("상태 확인") { Task { await model.refresh() } }
                 Spacer()
-                Button("Tailscale만") { Task { await model.selectTailscale() } }
-                    .help("SSH 접속 주소가 Tailscale(ts.net, 100.64.0.0/10)인 연결만 체크합니다.")
-                Button("선택 재연결 (\(model.selected.count))") { Task { await model.reconnectSelected() } }
-                    .disabled(model.selected.isEmpty)
-            }.disabled(model.busy || model.machines.isEmpty)
+                Group {
+                    Button("Tailscale만") { Task { await model.selectTailscale() } }
+                        .help("켜진 연결 중 SSH 접속 주소나 ProxyJump로 거치는 서버가 Tailscale(ts.net, 100.64.0.0/10, fd7a:115c:a1e0::/48)인 연결만 체크합니다.")
+                    Button("선택 재연결 (\(model.selected.count))") { Task { await model.reconnectSelected() } }
+                        .disabled(model.selected.isEmpty)
+                        .help("체크한 연결 중 Herdr에서 켜진 연결만 재연결합니다.")
+                }.disabled(model.machines.isEmpty)
+            }.disabled(model.busy)
             HStack {
                 Button("설정") { openWindow(id: "settings") }
                 Spacer()

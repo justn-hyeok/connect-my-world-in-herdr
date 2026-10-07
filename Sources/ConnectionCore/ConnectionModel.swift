@@ -56,9 +56,10 @@ import Observation
             message = "Herdr 등록 목록을 읽지 못했습니다. 로컬 Herdr가 실행 중인지 확인해주세요."
             return false
         }
-        // First run: start from the connections Herdr already has turned on.
+        // First run: start from the connections Herdr already has turned on. An empty
+        // registry (Herdr still starting) must not use up that default.
         if preferences.object(forKey: selectionKey) == nil {
-            selected = Set(decoded.filter(\.enabled).map(\.id))
+            if !decoded.isEmpty { selected = Set(decoded.filter(\.enabled).map(\.id)) }
         } else {
             let current = selected.intersection(decoded.map(\.id))
             if current != selected { selected = current }
@@ -116,32 +117,46 @@ import Observation
         return result.code == 0
     }
 
-    public func toggle(_ machine: Machine) {
-        if selected.contains(machine.id) { selected.remove(machine.id) } else { selected.insert(machine.id) }
+    public func toggle(_ machine: Machine) { setSelected(machine, !selected.contains(machine.id)) }
+
+    public func setSelected(_ machine: Machine, _ on: Bool) {
+        if on { selected.insert(machine.id) } else { selected.remove(machine.id) }
     }
 
-    /// Replaces the selection with connections whose effective SSH host is on the tailnet.
+    /// Replaces the selection with enabled connections whose SSH host, or first ProxyJump hop, is on the tailnet.
     public func selectTailscale() async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
         guard await loadRegistry() else { return }
         var tailnet: Set<String> = []
-        for machine in machines where Reconnection.sshArguments(machine) != nil {
-            if await reachesTailnet(machine.target) { tailnet.insert(machine.id) }
+        var cache: [String: CommandResult] = [:]
+        for machine in machines where machine.enabled && Reconnection.sshArguments(machine) != nil {
+            guard let reaches = await reachesTailnet(machine.target, cache: &cache) else {
+                // Keep the user's choice rather than saving a selection built from a broken SSH config.
+                message = "\(machine.label): ssh -G 설정을 읽지 못해 선택을 바꾸지 않았습니다."
+                return
+            }
+            if reaches { tailnet.insert(machine.id) }
         }
         selected = tailnet
         message = tailnet.isEmpty ? "Tailscale 연결을 찾지 못했습니다." : "Tailscale 연결 \(tailnet.count)개 선택"
     }
 
-    /// True when the host itself, or a ProxyJump hop on the way to it, is on the tailnet.
-    private func reachesTailnet(_ target: String) async -> Bool {
+    /// True when the host itself, or a ProxyJump hop on the way to it, is on the tailnet;
+    /// nil when `ssh -G` fails. Results are shared across machines behind the same jump host.
+    private func reachesTailnet(_ target: String, cache: inout [String: CommandResult]) async -> Bool? {
         var next: String? = target
         var seen: Set<String> = []
         // Bounded walk: jump chains are short, and a config loop must not spin.
         while let hop = next, seen.count < 4, seen.insert(hop).inserted {
-            let config = await runner("/usr/bin/ssh", ["-G", hop])
-            if let host = Policy.sshHostname(config), Policy.isTailscale(host: host) { return true }
+            let config: CommandResult
+            if let cached = cache[hop] { config = cached } else {
+                config = await runner("/usr/bin/ssh", ["-G", hop])
+                cache[hop] = config
+            }
+            guard let host = Policy.sshHostname(config) else { return nil }
+            if Policy.isTailscale(host: host) { return true }
             next = Policy.sshFirstJump(config)
         }
         return false
@@ -152,8 +167,11 @@ import Observation
         busy = true
         defer { busy = false; updated = Date() }
         guard await loadRegistry() else { return }
-        let targets = machines.filter { selected.contains($0.id) }
-        guard !targets.isEmpty else { message = "선택한 연결이 없습니다."; return }
+        let chosen = machines.filter { selected.contains($0.id) }
+        guard !chosen.isEmpty else { message = "선택한 연결이 없습니다."; return }
+        // A batch never turns on a connection that is off in Herdr; clicking its row still does.
+        let skipped = chosen.filter { !$0.enabled }
+        let targets = chosen.filter(\.enabled)
         var successes = 0
         var failed: [String] = []
         for machine in targets {
@@ -162,5 +180,6 @@ import Observation
         }
         message = "\(successes)개 연결 갱신 완료"
         if !failed.isEmpty { message += " · 확인 필요: " + failed.joined(separator: ", ") }
+        if !skipped.isEmpty { message += " · 꺼진 연결 건너뜀: " + skipped.map(\.label).joined(separator: ", ") }
     }
 }

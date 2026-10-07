@@ -36,10 +36,18 @@ public enum Policy {
     public static func isTailscale(host: String) -> Bool {
         let host = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]. "))
         if host.hasSuffix(".ts.net") { return true }
-        if host.hasPrefix("fd7a:115c:a1e0:") { return true }
-        let octets = host.split(separator: ".", omittingEmptySubsequences: false).compactMap { UInt8($0) }
-        return octets.count == 4 && host.split(separator: ".").count == 4
-            && octets[0] == 100 && (64...127).contains(octets[1])
+        // inet_pton rejects malformed text and normalizes IPv6 spellings.
+        var v4 = in_addr()
+        if inet_pton(AF_INET, host, &v4) == 1 {
+            let bytes = withUnsafeBytes(of: v4.s_addr) { Array($0) }
+            return bytes[0] == 100 && (bytes[1] & 0xC0) == 0x40
+        }
+        var v6 = in6_addr()
+        if inet_pton(AF_INET6, host, &v6) == 1 {
+            let bytes = withUnsafeBytes(of: v6) { Array($0) }
+            return bytes.prefix(6).elementsEqual([0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0])
+        }
+        return false
     }
 
     /// The effective host from `ssh -G` output, so aliases in ~/.ssh/config resolve.
