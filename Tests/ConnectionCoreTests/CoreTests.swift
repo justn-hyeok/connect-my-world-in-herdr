@@ -79,3 +79,16 @@ private actor FakeRunner {
     #expect(success)
     #expect(start.duration(to: .now) < .seconds(5))
 }
+
+@Test func tailscaleHostsAreRecognizedByAddressOrMagicDNS() {
+    for host in ["rapi-agent.tail993e8d.ts.net", "100.64.0.1", "100.127.255.254", "100.75.152.85",
+                 "fd7a:115c:a1e0::9829:9413", "[fd7a:115c:a1e0::1]", "HOST.TS.NET"] {
+        #expect(Policy.isTailscale(host: host), "\(host)")
+    }
+    for host in ["192.168.0.26", "100.63.0.1", "100.128.0.1", "10.0.0.1", "dev.example.cloud",
+                 "ts.net.example.com", "100.75.152", "100.75.152.85.5", "fd7a:115c:a1e1::1", ""] {
+        #expect(!Policy.isTailscale(host: host), "\(host)")
+    }
+    #expect(Policy.sshHostname(.init(code: 0, output: "user a\nhostname 100.75.152.85\nport 22")) == "100.75.152.85")
+    #expect(Policy.sshHostname(.init(code: 255, output: "hostname x")) == nil)
+}

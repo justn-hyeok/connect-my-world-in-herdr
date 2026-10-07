@@ -23,6 +23,12 @@ struct Panel: View {
             ForEach(MachineHierarchy.rows(model.machines)) { row in
                 let machine = row.machine
                 let state = model.states[machine.id] ?? .checking
+                HStack(spacing: 8) {
+                Toggle("\(machine.label) 선택", isOn: Binding(
+                    get: { model.selected.contains(machine.id) },
+                    set: { _ in model.toggle(machine) }))
+                    .toggleStyle(.checkbox).labelsHidden()
+                    .disabled(model.busy)
                 Button {
                     Task { await model.reconnect(machine) }
                 } label: {
@@ -49,14 +55,18 @@ struct Panel: View {
                 .disabled(model.busy)
                 .help(model.details[machine.id] ?? "클릭하여 재연결")
                 .accessibilityLabel("\(machine.label), \(row.isVM ? "소속 VM, " : "")\(state.rawValue), 재연결")
+                }
             }
             Divider()
             Text(model.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button("상태 확인") { Task { await model.refresh() } }
-                Button("전체 재연결") { Task { await model.reconnectAll() } }
-                    .disabled(model.machines.isEmpty)
-            }.disabled(model.busy)
+                Spacer()
+                Button("Tailscale만") { Task { await model.selectTailscale() } }
+                    .help("SSH 접속 주소가 Tailscale(ts.net, 100.64.0.0/10)인 연결만 체크합니다.")
+                Button("선택 재연결 (\(model.selected.count))") { Task { await model.reconnectSelected() } }
+                    .disabled(model.selected.isEmpty)
+            }.disabled(model.busy || model.machines.isEmpty)
             HStack {
                 Button("설정") { openWindow(id: "settings") }
                 Spacer()
@@ -64,7 +74,7 @@ struct Panel: View {
                 Button("종료") { NSApplication.shared.terminate(nil) }
             }.font(.caption)
         }
-        .padding(18).frame(width: 340)
+        .padding(18).frame(width: 380)
     }
     func symbol(_ state: ConnectionState) -> String {
         switch state {

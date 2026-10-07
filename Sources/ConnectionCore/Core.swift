@@ -31,6 +31,25 @@ public enum Policy {
         }
         return enabled ? .ready : .disabled
     }
+
+    /// Tailscale MagicDNS names and tailnet address ranges (100.64.0.0/10, fd7a:115c:a1e0::/48).
+    public static func isTailscale(host: String) -> Bool {
+        let host = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]. "))
+        if host.hasSuffix(".ts.net") { return true }
+        if host.hasPrefix("fd7a:115c:a1e0:") { return true }
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false).compactMap { UInt8($0) }
+        return octets.count == 4 && host.split(separator: ".").count == 4
+            && octets[0] == 100 && (64...127).contains(octets[1])
+    }
+
+    /// The effective host from `ssh -G` output, so aliases in ~/.ssh/config resolve.
+    public static func sshHostname(_ result: CommandResult) -> String? {
+        guard result.code == 0 else { return nil }
+        for line in result.output.split(separator: "\n") where line.hasPrefix("hostname ") {
+            return String(line.dropFirst("hostname ".count))
+        }
+        return nil
+    }
 }
 
 public enum Command {
