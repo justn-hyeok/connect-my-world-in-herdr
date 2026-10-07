@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Replace 전체 재연결 with 선택 재연결: each row has a checkbox and only checked connections reconnect. The selection is remembered; on first run only connections Herdr already has enabled are checked. A batch never turns on a connection that is off in Herdr; it is skipped and listed, and clicking its row still reconnects it.
+- Add a `Tailscale만` button that checks only enabled connections whose effective SSH host (`ssh -G`) is a `*.ts.net` name or a tailnet address (100.64.0.0/10, fd7a:115c:a1e0::/48). A LAN host reached through a ProxyJump hop on the tailnet also counts. If `ssh -G` fails, the existing selection is kept.
+
 ## 0.2.1 — 2026-10-07
 
 - Remove an unbounded process-exit wait that could leave server status checking busy after the child command had already exited. This fix existed in an unreleased local 0.1.5 build and was missing from 0.2.0.

@@ -31,6 +31,47 @@ public enum Policy {
         }
         return enabled ? .ready : .disabled
     }
+
+    /// Tailscale MagicDNS names and tailnet address ranges (100.64.0.0/10, fd7a:115c:a1e0::/48).
+    public static func isTailscale(host: String) -> Bool {
+        let host = host.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]. "))
+        if host.hasSuffix(".ts.net") { return true }
+        // inet_pton rejects malformed text and normalizes IPv6 spellings.
+        var v4 = in_addr()
+        if inet_pton(AF_INET, host, &v4) == 1 {
+            let bytes = withUnsafeBytes(of: v4.s_addr) { Array($0) }
+            return bytes[0] == 100 && (bytes[1] & 0xC0) == 0x40
+        }
+        var v6 = in6_addr()
+        if inet_pton(AF_INET6, host, &v6) == 1 {
+            let bytes = withUnsafeBytes(of: v6) { Array($0) }
+            return bytes.prefix(6).elementsEqual([0xfd, 0x7a, 0x11, 0x5c, 0xa1, 0xe0])
+        }
+        return false
+    }
+
+    /// The effective host from `ssh -G` output, so aliases in ~/.ssh/config resolve.
+    public static func sshHostname(_ result: CommandResult) -> String? { sshOption("hostname", result) }
+
+    /// The first hop of `ProxyJump` as a target for another `ssh -G`, without user or port.
+    public static func sshFirstJump(_ result: CommandResult) -> String? {
+        guard let value = sshOption("proxyjump", result), value != "none",
+              let first = value.split(separator: ",").first else { return nil }
+        var hop = String(first)
+        if hop.hasPrefix("ssh://") { hop.removeFirst("ssh://".count) }
+        if let at = hop.lastIndex(of: "@") { hop = String(hop[hop.index(after: at)...]) }
+        if hop.hasPrefix("[") { hop = String(hop.dropFirst().prefix { $0 != "]" }) }
+        else if hop.filter({ $0 == ":" }).count == 1 { hop = String(hop.prefix { $0 != ":" }) }
+        return hop.isEmpty || hop.hasPrefix("-") ? nil : hop
+    }
+
+    private static func sshOption(_ key: String, _ result: CommandResult) -> String? {
+        guard result.code == 0 else { return nil }
+        for line in result.output.split(separator: "\n") where line.hasPrefix(key + " ") {
+            return String(line.dropFirst(key.count + 1))
+        }
+        return nil
+    }
 }
 
 public enum Command {
