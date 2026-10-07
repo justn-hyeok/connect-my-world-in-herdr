@@ -4,11 +4,10 @@ import Foundation
 
 @Test func connectionEvidence() {
     let healthy = CommandResult(code: 0, output: "status: running\nendpoint_compatible: yes")
-    #expect(Policy.state(ssh: healthy, enabled: true, authExpired: false) == .ready)
-    #expect(Policy.state(ssh: healthy, enabled: false, authExpired: false) == .disabled)
-    #expect(Policy.state(ssh: healthy, enabled: true, authExpired: true) == .authentication)
-    #expect(Policy.state(ssh: .init(code: 0, output: "status: stopped"), enabled: true, authExpired: false) == .serverStopped)
-    #expect(Policy.state(ssh: .init(code: 255, output: "timeout"), enabled: true, authExpired: false) == .unreachable)
+    #expect(Policy.state(ssh: healthy, enabled: true) == .ready)
+    #expect(Policy.state(ssh: healthy, enabled: false) == .disabled)
+    #expect(Policy.state(ssh: .init(code: 0, output: "status: stopped"), enabled: true) == .serverStopped)
+    #expect(Policy.state(ssh: .init(code: 255, output: "timeout"), enabled: true) == .unreachable)
 }
 
 private actor FakeRunner {
@@ -42,31 +41,6 @@ private actor FakeRunner {
     let lostAfterEnable = FakeRunner([healthy, .init(code: 0, output: ""), .init(code: 0, output: ""), .init(code: 255, output: "")])
     let uncertain = await Reconnection.run(machine, herdr: "/test/herdr") { exe, args in await lostAfterEnable.run(exe, args) }
     #expect(uncertain.code != 0)
-}
-
-@Test func trustedLinkOnly() {
-    #expect(Policy.loginURL("") == nil)
-    #expect(Policy.loginURL("https://teleport.madp.cloud/web/login") != nil)
-    #expect(Policy.loginURL("https://teleport.madp.cloud.evil.test/") == nil)
-    #expect(Policy.loginURL("http://teleport.madp.cloud/") == nil)
-    #expect(Policy.loginURL("https://user:password@teleport.madp.cloud/") == nil)
-}
-
-@Test func certificateMustActuallyBeValid() {
-    let now = Date(timeIntervalSince1970: 1_700_000_000)
-    let valid = """
-    {"active":{"profile_url":"https://teleport.madp.cloud:443","cluster":"madp.cloud","valid_until":"2099-01-01T00:00:00Z"},"profiles":[]}
-    """
-    #expect(Policy.tshValid(.init(code: 0, output: valid), now: now))
-    #expect(!Policy.tshValid(.init(code: 1, output: valid), now: now))
-    #expect(!Policy.tshValid(.init(code: 0, output: valid.replacingOccurrences(of: "2099", with: "2000")), now: now))
-    #expect(!Policy.tshValid(.init(code: 0, output: valid.replacingOccurrences(of: "madp.cloud", with: "other.cloud")), now: now))
-    let misleading = """
-    {"active":{"profile_url":"https://other.cloud","cluster":"other.cloud","valid_until":"2099-01-01T00:00:00Z"},"profiles":[{"cluster":"madp.cloud"}]}
-    """
-    #expect(!Policy.tshValid(.init(code: 0, output: misleading), now: now))
-    #expect(!Policy.tshValid(.init(code: 0, output: "not JSON"), now: now))
-    #expect(Policy.tshValid(.init(code: 0, output: valid.replacingOccurrences(of: "00:00:00Z", with: "00:00:00.123Z")), now: now))
 }
 
 @Test func commandsAreBoundedAndPreserveArguments() async {
